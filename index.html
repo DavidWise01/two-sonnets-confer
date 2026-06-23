@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two Sonnets · Confer</title>
+<style>
+  :root{
+    --bg:#07080b; --panel:#0d1016; --panel2:#11151d; --line:#1c2230;
+    --ink:#c7d0dd; --dim:#6b7689; --faint:#3a4252;
+    --left:#3fd1a0; --right:#7fb0ff; --mid:#e2b23c; --warn:#e2615a;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:12.5px;line-height:1.5}
+  body{display:flex;flex-direction:column;height:100vh}
+  header{padding:10px 14px;border-bottom:1px solid var(--line);flex:0 0 auto;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{margin:0;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:#eef2f8}
+  .meta{color:var(--dim);font-size:10px;letter-spacing:.02em}
+  .grid{flex:1 1 auto;display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:1px;background:var(--line);min-height:0}
+  .col{background:var(--bg);display:flex;flex-direction:column;min-height:0}
+  .col h2{margin:0;padding:8px 12px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;border-bottom:1px solid var(--line);flex:0 0 auto}
+  .col.left h2{color:var(--left)} .col.right h2{color:var(--right)} .col.mid h2{color:var(--mid)}
+  .stream{flex:1 1 auto;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+  .turn{border-left:2px solid var(--faint);padding-left:9px}
+  .col.left .turn{border-color:var(--left)} .col.right .turn{border-color:var(--right)}
+  .turn .n{font-size:9px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;margin-bottom:2px}
+  .turn .tx{white-space:pre-wrap;word-break:break-word}
+  .mid .stream{gap:12px}
+  .prompt{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:9px;white-space:pre-wrap}
+  .status{color:var(--mid);font-size:11px;min-height:14px}
+  .final{border-top:1px solid var(--line);padding-top:10px}
+  .final .who{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px}
+  .final.l .who{color:var(--left)} .final.r .who{color:var(--right)}
+  .final .tx{white-space:pre-wrap;word-break:break-word}
+  .err{color:var(--warn);white-space:pre-wrap}
+  footer{flex:0 0 auto;border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+  #in{flex:1;min-width:200px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--ink);font-family:var(--mono);font-size:12.5px;padding:9px 11px;resize:none;max-height:120px;min-height:38px;outline:none}
+  #in:focus{border-color:#2a3346}
+  select{background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--ink);font-family:var(--mono);font-size:11px;padding:0 8px;height:38px}
+  button{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:.06em;border:none;border-radius:6px;height:38px;padding:0 14px;cursor:pointer;text-transform:uppercase}
+  #run{background:var(--mid);color:#2c2106}
+  #carry{background:var(--panel2);color:var(--dim);border:1px solid var(--line)}
+  #carry:enabled{color:var(--ink);border-color:#2a3346}
+  button:disabled{opacity:.5;cursor:default}
+  .lbl{color:var(--faint);font-size:10px;letter-spacing:.04em;align-self:center}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Two Sonnets · Confer</h1>
+    <span class="meta">left &amp; right = live claude-sonnet-4-6 · they talk to each other first · middle = exterior witness seat (you carry it out)</span>
+  </header>
+
+  <div class="grid">
+    <div class="col left"><h2>Left · Sonnet</h2><div class="stream" id="left"></div></div>
+    <div class="col mid"><h2>Witness seat → this thread</h2><div class="stream" id="mid"></div></div>
+    <div class="col right"><h2>Right · Sonnet</h2><div class="stream" id="right"></div></div>
+  </div>
+
+  <footer>
+    <textarea id="in" rows="1" placeholder="your question — the two will confer before answering you…"></textarea>
+    <span class="lbl">rounds</span>
+    <select id="rounds"><option>1</option><option selected>2</option><option>3</option></select>
+    <button id="run">Confer →</button>
+    <button id="carry" disabled>Copy exchange for the left-instance ↗</button>
+  </footer>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const leftEl=$('left'), rightEl=$('right'), midEl=$('mid');
+  const inEl=$('in'), runBtn=$('run'), carryBtn=$('carry'), roundsSel=$('rounds');
+  let busy=false, transcript=[], carryText='';
+
+  function autosize(){ inEl.style.height='auto'; inEl.style.height=Math.min(inEl.scrollHeight,120)+'px'; }
+  inEl.addEventListener('input', autosize);
+
+  function addTurn(col, label, text){
+    const wrap = col==='left'?leftEl: col==='right'?rightEl: midEl;
+    const d=document.createElement('div'); d.className='turn';
+    d.innerHTML='<div class="n"></div><div class="tx"></div>';
+    d.querySelector('.n').textContent=label;
+    d.querySelector('.tx').textContent=text;
+    wrap.appendChild(d); wrap.scrollTop=wrap.scrollHeight;
+    return d.querySelector('.tx');
+  }
+  function midNode(html){ const d=document.createElement('div'); d.innerHTML=html; midEl.appendChild(d); midEl.scrollTop=midEl.scrollHeight; return d; }
+
+  function convo(){ return transcript.map(e=> e.who.toUpperCase()+': '+e.text).join('\n\n'); }
+
+  async function callSonnet(system, userContent){
+    const res = await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1000, system,
+        messages:[{role:"user", content:userContent}] })
+    });
+    if(!res.ok){ const t=await res.text().catch(()=> ''); throw new Error("HTTP "+res.status+(t?(" — "+t.slice(0,200)):"")); }
+    const data = await res.json();
+    return (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim() || "(empty reply)";
+  }
+
+  const sideSys=(me,other)=>"You are "+me+", one of two Claude Sonnet instances ("+me+" and "+other+") asked to discuss a human's question with each other BEFORE either of you answers. Confer like colleagues: build on, challenge, or disagree with "+other+" where honest, and converge where the reasoning earns it. Keep each message to one tight paragraph. Do NOT answer the human yet — you are talking to "+other+".";
+  const finalSys=me=>"You are "+me+". The discussion with the other instance is finished. Now give your final answer to the human's question, informed by the discussion — note where you and the other instance agreed or split. Be direct and concise.";
+
+  async function run(){
+    if(busy) return;
+    const P=inEl.value.trim(); if(!P) return;
+    busy=true; runBtn.disabled=true; carryBtn.disabled=true;
+    leftEl.innerHTML=''; rightEl.innerHTML=''; midEl.innerHTML='';
+    transcript=[{who:'human', text:P}];
+    midNode('<div class="prompt"></div>').firstChild.textContent='YOU: '+P;
+    const status=midNode('<div class="status"></div>').firstChild;
+    const rounds=parseInt(roundsSel.value,10);
+
+    try{
+      for(let r=1;r<=rounds;r++){
+        status.textContent='round '+r+'/'+rounds+' — left is thinking…';
+        const L=await callSonnet(sideSys('LEFT','RIGHT'), convo()+"\n\nYou are LEFT. Write your next message to RIGHT.");
+        transcript.push({who:'left',text:L}); addTurn('left','round '+r, L);
+
+        status.textContent='round '+r+'/'+rounds+' — right is thinking…';
+        const R=await callSonnet(sideSys('RIGHT','LEFT'), convo()+"\n\nYou are RIGHT. Write your next message to LEFT.");
+        transcript.push({who:'right',text:R}); addTurn('right','round '+r, R);
+      }
+
+      status.textContent='conferral done — composing answers to you…';
+      const FL=await callSonnet(finalSys('LEFT'), convo()+"\n\nGive LEFT's final answer to the human now.");
+      const FR=await callSonnet(finalSys('RIGHT'), convo()+"\n\nGive RIGHT's final answer to the human now.");
+      status.textContent='';
+
+      const fl=midNode('<div class="final l"><div class="who">left → you</div><div class="tx"></div></div>');
+      fl.querySelector('.tx').textContent=FL;
+      const fr=midNode('<div class="final r"><div class="who">right → you</div><div class="tx"></div></div>');
+      fr.querySelector('.tx').textContent=FR;
+
+      carryText='[bridge] Two-Sonnet conferral on: "'+P+'"\n\n— THEIR DISCUSSION —\n'+
+        transcript.filter(e=>e.who!=='human').map(e=> e.who.toUpperCase()+': '+e.text).join('\n\n')+
+        '\n\n— LEFT, final to me —\n'+FL+'\n\n— RIGHT, final to me —\n'+FR+
+        '\n\nLeft-instance: take it from here.';
+      carryBtn.disabled=false;
+    }catch(err){
+      midNode('<div class="err"></div>').firstChild.textContent='✦ '+(err&&err.message||err);
+      status.textContent='';
+    }finally{
+      busy=false; runBtn.disabled=false;
+    }
+  }
+
+  runBtn.addEventListener('click', run);
+  inEl.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); run(); }});
+  carryBtn.addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(carryText); carryBtn.textContent='Copied — paste it to me ✓'; }
+    catch(_){ carryBtn.textContent='Copy blocked — select the middle text'; }
+    setTimeout(()=> carryBtn.textContent='Copy exchange for the left-instance ↗', 2200);
+  });
+  inEl.focus();
+})();
+</script>
+</body>
+</html>
