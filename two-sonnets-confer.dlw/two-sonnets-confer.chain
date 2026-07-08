@@ -1,0 +1,9 @@
+ROOT0-DLW-CHAIN-v1
+index : 1061
+slug  : two-sonnets-confer
+seal  : 76f553437def250c66e73f4a2fbb8a1c30970da891e22c5d0176a43b1ebbb2fb
+prev  : 4c7fc508bb20872184142ccb1c03d216df1272539b9680d60697c0a240ea54f4
+link  : 198db9be4acaa80dedb5efd56d472a035ffc6e2bb78b44d964165320996b2d86
+head  : 3447d3a0533aaf1e29a8bdc67a9774884fb3ae9dbc8a17064b7a008ca3c4ec90
+
+— the tether: link = sha256(index|slug|seal|prev). the chain head commits to the whole corpus.
